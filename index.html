@@ -184,9 +184,12 @@
           headers: { ...supabaseHeaders(), Prefer: 'return=minimal' },
           body: JSON.stringify(confession)
         });
-        if (!response.ok) throw new Error('Could not save confession');
+        if (!response.ok) {
+          const details = await response.text();
+          throw new Error(`Supabase ${response.status}: ${details}`);
+        }
       } catch (error) {
-        alert('Your confession could not be saved. Check your Supabase table and policies, then try again.');
+        alert(`Your confession could not be saved.\n\n${error.message}`);
         sendButton.disabled = false;
         sendButton.firstChild.textContent = 'Create my confession link ';
         return;
