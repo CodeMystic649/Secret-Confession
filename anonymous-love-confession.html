@@ -139,7 +139,22 @@
     const shareLink = document.getElementById('shareLink');
     const copyButton = document.getElementById('copyButton');
     const anotherButton = document.getElementById('anotherButton');
+    const supabaseUrl = 'https://ggyfmsdadgjfixjsrczy.supabase.co/rest/v1';
+    const supabaseKey = 'sb_publishable_EdLf979EeA4lSxbQObo3Fg_Ivxu8sda';
     let privateLink = '';
+
+    function supabaseHeaders() {
+      return {
+        apikey: supabaseKey,
+        Authorization: `Bearer ${supabaseKey}`,
+        'Content-Type': 'application/json'
+      };
+    }
+
+    function createConfessionId() {
+      const bytes = crypto.getRandomValues(new Uint8Array(6));
+      return Array.from(bytes, byte => byte.toString(36).padStart(2, '0')).join('').slice(0, 10);
+    }
 
     function showRecipientView(data) {
       document.getElementById('brandName').textContent = `DEAR, ${data.recipient}`;
@@ -156,11 +171,27 @@
       anotherButton.textContent = 'Write your own confession';
     }
 
-    form.addEventListener('submit', (event) => {
+    form.addEventListener('submit', async (event) => {
       event.preventDefault();
       const data = new FormData(form);
-      const confession = { recipient: data.get('recipient'), message: data.get('message') };
-      const link = `${window.location.href.split('#')[0]}#confession=${encodeURIComponent(JSON.stringify(confession))}`;
+      const confession = { id: createConfessionId(), recipient: data.get('recipient'), message: data.get('message') };
+      const sendButton = form.querySelector('.send');
+      sendButton.disabled = true;
+      sendButton.firstChild.textContent = 'Saving confession... ';
+      try {
+        const response = await fetch(`${supabaseUrl}/confessions`, {
+          method: 'POST',
+          headers: { ...supabaseHeaders(), Prefer: 'return=minimal' },
+          body: JSON.stringify(confession)
+        });
+        if (!response.ok) throw new Error('Could not save confession');
+      } catch (error) {
+        alert('Your confession could not be saved. Check your Supabase table and policies, then try again.');
+        sendButton.disabled = false;
+        sendButton.firstChild.textContent = 'Create my confession link ';
+        return;
+      }
+      const link = `${window.location.href.split('#')[0]}#${confession.id}`;
       recipientPreview.textContent = confession.recipient;
       messagePreview.textContent = `“${confession.message}”`;
       privateLink = link;
@@ -196,14 +227,21 @@
       document.getElementById('recipient').focus();
     });
 
-    const encodedConfession = new URLSearchParams(window.location.hash.slice(1)).get('confession');
-    if (encodedConfession) {
+    async function loadConfession() {
+      const confessionId = window.location.hash.slice(1);
+      if (!confessionId || confessionId.length > 20) return;
       try {
-        showRecipientView(JSON.parse(decodeURIComponent(encodedConfession)));
+        const response = await fetch(`${supabaseUrl}/confessions?id=eq.${encodeURIComponent(confessionId)}&select=recipient,message`, {
+          headers: supabaseHeaders()
+        });
+        if (!response.ok) throw new Error('Could not load confession');
+        const rows = await response.json();
+        if (rows.length) showRecipientView(rows[0]);
       } catch {
-        window.history.replaceState({}, '', window.location.pathname + window.location.search);
+        alert('This confession link could not be loaded.');
       }
     }
+    loadConfession();
   </script>
 </body>
 </html>
